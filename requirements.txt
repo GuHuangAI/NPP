@@ -1,0 +1,10 @@
+torch==1.2.0
+tensorboardX
+easydict
+opencv-python
+matplotlib
+numpy==1.18.1
+scipy
+glob
+csv
+pyyaml

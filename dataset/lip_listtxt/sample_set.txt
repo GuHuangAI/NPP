@@ -1,0 +1,10 @@
+val_images/11209_186528.jpg val_segmentations/11209_186528.png
+val_images/129735_184661.jpg val_segmentations/129735_184661.png
+val_images/17003_429752.jpg val_segmentations/17003_429752.png
+val_images/241422_463590.jpg val_segmentations/241422_463590.png
+val_images/308496_510684.jpg val_segmentations/308496_510684.png
+val_images/338549_192088.jpg val_segmentations/338549_192088.png
+val_images/41831_448669.jpg val_segmentations/41831_448669.png
+val_images/436662_185463.jpg val_segmentations/436662_185463.png
+val_images/448069_2163031.jpg val_segmentations/448069_2163031.png
+val_images/566596_421270.jpg val_segmentations/566596_421270.png
