@@ -4,109 +4,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 import os
-# sys.path.append('G:\\SpyderPro\\autoparsing\\auto_parsing')
 from models.operations import *
 from models import genotypes as gt
 from models.module import PMSF, ASPP, SPHead, PSPModule
 import numpy as np
 import math
 
-# import functools
-# from oc_module.pyramid_oc_block import Pyramid_OC_Module
-# from inplace_abn import InPlaceABN, InPlaceABNSync
-# BatchNorm2d = functools.partial(InPlaceABNSync, activation='identity')
 BN_MOMENTUM = 0.1
 
-
-class PSPModule(nn.Module):
-    """
-    Reference:
-        Zhao, Hengshuang, et al. *"Pyramid scene parsing network."*
-    """
-
-    def __init__(self, features, out_features=512, sizes=(1, 2, 3, 6)):
-        super(PSPModule, self).__init__()
-
-        self.stages = []
-        self.stages = nn.ModuleList([self._make_stage(features, out_features, size) for size in sizes])
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(features + len(sizes) * out_features, out_features, kernel_size=3, padding=1, dilation=1,
-                      bias=False),
-            nn.BatchNorm2d(out_features, momentum=BN_MOMENTUM),
-            nn.ReLU(inplace=True),
-            # nn.Dropout2d(0.1)
-        )
-
-    def _make_stage(self, features, out_features, size):
-        prior = nn.AdaptiveAvgPool2d(output_size=(size, size))
-        conv = nn.Conv2d(features, out_features, kernel_size=1, bias=False)
-        # bn = InPlaceABNSync(out_features)
-        bn = nn.BatchNorm2d(out_features, momentum=BN_MOMENTUM)
-        return nn.Sequential(prior, conv, bn)
-
-    def forward(self, feats):
-        h, w = feats.size(2), feats.size(3)
-        priors = [F.interpolate(input=stage(feats), size=(h, w), mode='bilinear', align_corners=True) for stage in
-                  self.stages] + [feats]
-        bottle = self.bottleneck(torch.cat(priors, 1))
-        return bottle
-
-
-class ASPP(nn.Module):
-
-    def __init__(self, in_channel=512, depth=256):
-        super(ASPP, self).__init__()
-
-        # global average pooling : init nn.AdaptiveAvgPool2d ;also forward torch.mean(,,keep_dim=True)
-
-        self.mean = nn.AdaptiveAvgPool2d((1, 1))
-
-        self.conv = nn.Conv2d(in_channel, depth, 1, 1)
-        self.bn = nn.BatchNorm2d(depth)
-        # self.relu=nn.ReLU(inplace=True)
-        # k=1 s=1 no pad
-
-        self.atrous_block1 = nn.Conv2d(in_channel, depth, 1, 1)
-
-        self.atrous_block6 = nn.Conv2d(in_channel, depth, 3, 1, padding=6, dilation=6)
-
-        self.atrous_block12 = nn.Conv2d(in_channel, depth, 3, 1, padding=12, dilation=12)
-
-        self.atrous_block18 = nn.Conv2d(in_channel, depth, 3, 1, padding=24, dilation=24)
-
-        self.conv_1x1_output = nn.Sequential(
-
-            nn.Conv2d(depth * 5, depth, kernel_size=1, padding=0, dilation=1, bias=False),
-
-            nn.BatchNorm2d(depth),
-
-            nn.ReLU(inplace=True),
-
-            nn.Dropout2d(0.1)
-
-        )
-
-    def forward(self, x):
-        size = x.shape[2:]
-
-        image_features = self.mean(x)
-
-        image_features = self.bn(self.conv(image_features))
-
-        image_features = F.interpolate(image_features, size=size, mode='bilinear')
-
-        atrous_block1 = self.bn(self.atrous_block1(x))
-
-        atrous_block6 = self.bn(self.atrous_block6(x))
-
-        atrous_block12 = self.bn(self.atrous_block12(x))
-
-        atrous_block18 = self.bn(self.atrous_block18(x))
-
-        net = self.conv_1x1_output(torch.cat([image_features, atrous_block1, atrous_block6,
-                                              atrous_block12, atrous_block18], dim=1))
-
-        return net
 
 class Cell(nn.Module):
 
@@ -209,78 +114,6 @@ class Interpolate(nn.Module):
 
     def forward(self, x):
         return F.interpolate(x, scale_factor=self.s, mode=self.mode, align_corners=True)
-
-
-class PMSF(nn.Module):  # Pose Multi-Scale Fusion
-    def __init__(self, features, out_features=256, sizes=(1, 1 / 2, 1 / 4, 1 / 8)):
-        super(PMSF, self).__init__()
-        self.stages = []
-        self.stages = nn.ModuleList([self._make_stage(features, out_features, size) for size in sizes])
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(len(sizes) * out_features, out_features, kernel_size=3, padding=1, dilation=1, bias=False),
-            nn.BatchNorm2d(out_features, momentum=BN_MOMENTUM),
-            nn.ReLU(inplace=True),
-            # nn.Dropout2d(0.1)
-        )
-
-    def _make_stage(self, features, out_features, size):
-        prior = Interpolate(scale_factor=size)
-        conv = nn.Conv2d(features, out_features, kernel_size=1, bias=False)
-        # bn = InPlaceABNSync(out_features)
-        bn = nn.BatchNorm2d(out_features, momentum=BN_MOMENTUM)
-        return nn.Sequential(prior, conv, bn)
-
-    def forward(self, feats):
-        h, w = feats.size(2), feats.size(3)
-        priors = [F.interpolate(input=stage(feats), size=(h, w), mode='bilinear', align_corners=True) for stage in
-                  self.stages]
-        bottle = self.bottleneck(torch.cat(priors, 1))
-        return bottle
-
-
-class Edge_Module(nn.Module):
-
-    def __init__(self, in_fea=[256, 512, 1024], mid_fea=256, out_fea=2):
-        super(Edge_Module, self).__init__()
-
-        self.conv1 = nn.Sequential(
-            nn.ReLU(),
-            nn.Conv2d(in_fea[0], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            nn.BatchNorm2d(mid_fea)
-        )
-        self.conv2 = nn.Sequential(
-            nn.ReLU(),
-            nn.Conv2d(in_fea[1], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            nn.BatchNorm2d(mid_fea)
-        )
-        self.conv3 = nn.Sequential(
-            nn.ReLU(),
-            nn.Conv2d(in_fea[2], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            nn.BatchNorm2d(mid_fea)
-        )
-        self.conv4 = nn.Conv2d(mid_fea, out_fea, kernel_size=3, padding=1, dilation=1, bias=True)
-        self.conv5 = nn.Conv2d(out_fea * 3, out_fea, kernel_size=1, padding=0, dilation=1, bias=True)
-
-    def forward(self, x1, x2, x3):
-        _, _, h, w = x1.size()
-
-        edge1_fea = self.conv1(x1)
-        edge1 = self.conv4(edge1_fea)
-        edge2_fea = self.conv2(x2)
-        edge2 = self.conv4(edge2_fea)
-        edge3_fea = self.conv3(x3)
-        edge3 = self.conv4(edge3_fea)
-
-        edge2_fea = F.interpolate(edge2_fea, size=(h, w), mode='bilinear', align_corners=True)
-        edge3_fea = F.interpolate(edge3_fea, size=(h, w), mode='bilinear', align_corners=True)
-        edge2 = F.interpolate(edge2, size=(h, w), mode='bilinear', align_corners=True)
-        edge3 = F.interpolate(edge3, size=(h, w), mode='bilinear', align_corners=True)
-
-        edge = torch.cat([edge1, edge2, edge3], dim=1)
-        edge_fea = torch.cat([edge1_fea, edge2_fea, edge3_fea], dim=1)
-        edge = self.conv5(edge)
-
-        return edge, edge_fea
 
 
 class PoseCell1(nn.Module):
@@ -394,164 +227,6 @@ class ParCell1(nn.Module):
         fea1 = torch.cat(states[0:3], dim=1)
         fea2 = torch.cat([states[i] for i in self._concat], dim=1)
         return fea1, fea2
-
-
-class MultiModal(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(MultiModal, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 1, padding=0, bias=False)
-        self.conv2 = nn.Conv2d(in_channels, out_channels, 1, padding=0, bias=False)
-        self.att1 = nn.Sequential(nn.Conv2d(in_channels, out_channels, 1, padding=0, bias=False),
-                                  nn.Sigmoid())
-        self.att2 = nn.Sequential(nn.Conv2d(in_channels, out_channels, 1, padding=0, bias=False),
-                                  nn.Sigmoid())
-
-    def forward(self, x1, x2):
-        tmp = x1
-        att1 = self.att1(tmp)
-        att2 = self.att2(x2)
-        x1 = tmp + torch.mul(self.conv1(x2), att1)
-        x2 = x2 + torch.mul(self.conv2(tmp), att2)
-        return x1, x2
-
-
-idx_par = [1, 2, 4, 13, 11, 5, 7, 6, 3, 14, 15, 10, 12, 9, 16, 17, 8, 18, 19, 0]
-idx_par_back = [19, 0, 1, 8, 2, 5, 7, 6, 16, 13, 11, 4, 12, 3, 9, 10, 14, 15, 17, 18]
-idx_pose = [9, 8, 7, 13, 12, 14, 11, 15, 10, 6, 3, 2, 4, 1, 5, 0]
-idx_pose_back = [15, 13, 11, 10, 12, 14, 9, 2, 1, 0, 8, 6, 4, 3, 5, 7]
-
-
-def group_pp(x, idx, groups=20):
-    b, c, h, w = x.shape
-    c_per_group = c // groups
-    y = []
-    for i in range(groups):
-        y.append(x[:, i * c_per_group:(i + 1) * c_per_group, :, :])
-    z = y.copy()
-    for i in range(len(y)):
-        z[i] = y[idx[i]]
-    return torch.cat(z, dim=1)
-
-
-class Structure_Diffusion_remap(nn.Module):
-
-    def __init__(self, in_channels, fea_channels, sizes=(1, 2, 4, 6)):
-        super(Structure_Diffusion_remap, self).__init__()
-        # self.stages = nn.ModuleList([self.make_stage(size) for size in sizes])
-        self.sizes = sizes
-        channels = sum(size * size for size in sizes)
-        self.fc1 = nn.Conv2d(4, 1, 1)
-        self.fc2 = nn.Conv2d(4, 1, 1)
-        self.fc3 = nn.Sequential(nn.Conv2d(channels, 16, 1),
-                                 nn.Conv2d(16, 1, 1))
-        self.fc4 = nn.Sequential(nn.Conv2d(channels, 16, 1),
-                                 nn.Conv2d(16, 1, 1))
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(fea_channels, fea_channels, kernel_size=3, padding=1, dilation=1),
-            # nn.Conv2d(fea_channels, fea_channels, 1),
-            nn.BatchNorm2d(fea_channels)
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(fea_channels, fea_channels, kernel_size=3, padding=1, dilation=1),
-            # nn.Conv2d(fea_channels, fea_channels, 1),
-            nn.BatchNorm2d(fea_channels)
-        )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(in_channels, fea_channels, kernel_size=1, padding=0, dilation=1),
-            # nn.Conv2d(fea_channels, fea_channels, 1),
-            nn.BatchNorm2d(fea_channels)
-        )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(in_channels, fea_channels, kernel_size=1, padding=0, dilation=1),
-            # nn.Conv2d(fea_channels, fea_channels, 1),
-            nn.BatchNorm2d(fea_channels)
-        )
-
-    def transform(self, x, size):
-        b, c, _, _ = x.shape
-        x = F.adaptive_avg_pool2d(x, output_size=(size, size))
-        return x.view(b, c, -1).permute(0, 2, 1).contiguous()
-
-    def struc(self, x1, x2):
-        s = torch.matmul(x1, x2.permute(0, 2, 1))
-        return 1. - s
-
-    def forward(self, x1, x2, x3, x4):
-        h, w = x1.shape[2:]
-
-        # print(x2.shape)
-        #x1 = group_pp(x1, idx=idx_pose, groups=16)
-        #x2 = group_pp(x2, idx=idx_par, groups=20)
-        x1 = self.conv3(x1)
-        x2 = self.conv4(x2)
-        # print(x2.shape)
-        # x3 = group_pp(x3, idx=idx_pose, groups=16)
-        # x4 = group_pp(x4, idx=idx_par, groups=20)
-        y1 = torch.cat([self.transform(x1, size) for size in self.sizes], dim=1)
-        y1 = F.normalize(y1, p=2, dim=-1)
-        y2 = torch.cat([self.transform(x2, size) for size in self.sizes], dim=1)
-        y2 = F.normalize(y2, p=2, dim=-1)
-        # print(y1.shape)
-        # print(y2.shape)
-        # b, vecs,w = y1.shape
-        s1 = self.struc(y1, y1).unsqueeze(1)
-        s2 = self.struc(y2, y2).unsqueeze(1)
-        s12 = self.struc(y1, y2).unsqueeze(1)
-        s3 = s1 * s2
-        a1 = torch.cat([s1, s2, s3, s12], dim=1)
-        a2 = torch.cat([s1, s2, s3, s12], dim=1)
-        a1 = F.softmax(self.fc1(a1).squeeze(1), dim=-1)
-        a2 = F.softmax(self.fc2(a2).squeeze(1), dim=-1)
-        # print('a1',a1.shape)
-        # print('y1',y1.shape)
-        y1 = torch.matmul(a1, y1).unsqueeze(3)
-        y2 = torch.matmul(a2, y2).unsqueeze(3)
-        y1 = F.sigmoid(self.fc3(y1).permute(0, 2, 1, 3))
-        y2 = F.sigmoid(self.fc3(y2).permute(0, 2, 1, 3))
-        tmp = x3
-        x3 = tmp + y1 * self.conv1(x4)
-        x4 = x4 + y2 * self.conv2(tmp)
-        # x3 = group_pp(x3, idx=idx_pose_back, groups=16)
-        # x4 = group_pp(x4, idx=idx_par_back, groups=20)
-        return x3, x4
-
-
-class FuseMap(nn.Module):
-    def __init__(self, in_channels, out_channels, map1_channels=16, map2_channels=20):
-        super(FuseMap, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.conv1 = nn.Conv2d(2 * in_channels, out_channels, 3, padding=1)
-        self.conv2 = nn.Conv2d(2 * in_channels, out_channels, 3, padding=1)
-        self.conv3 = nn.Conv2d(2 * out_channels, out_channels, 3, padding=1)
-        self.conv4 = nn.Conv2d(2 * out_channels, out_channels, 3, padding=1)
-
-        self.att1 = nn.Sequential(nn.Conv2d(map1_channels, out_channels, 1, padding=0, bias=False),
-                                        nn.Sigmoid())
-        self.att2 = nn.Sequential(nn.Conv2d(map2_channels, out_channels, 1, padding=0, bias=False),
-                                        nn.Sigmoid())
-        self.att3 = nn.Sequential(nn.Conv2d(map1_channels+map2_channels, out_channels, 1, padding=0, bias=False),
-                                  nn.Sigmoid())
-        self.att4 = nn.Sequential(nn.Conv2d(map1_channels+map2_channels, out_channels, 1, padding=0, bias=False),
-                                  nn.Sigmoid())
-        self.mean = nn.AdaptiveAvgPool2d((1,1))
-        self.max = nn.AdaptiveMaxPool2d((1,1))
-    def forward(self, x1, x2, x3, x4):
-        tmp = torch.cat((x1, x2), dim=1)
-        tmp2 = torch.cat((x3, x4), dim=1)
-        tmp2 = self.mean(tmp2) + self.max(tmp2)
-        att1 = self.att1(x3)
-        att2 = self.att2(x4)
-        x1 = x1 + torch.mul(self.conv1(tmp), att1)
-        x2 = x2 + torch.mul(self.conv2(tmp), att2)
-        tmp = torch.cat((x1, x2), dim=1)
-        att3 = self.att3(tmp2)
-        att4 = self.att4(tmp2)
-        x1 = x1 + self.conv3(tmp) * att3
-        x2 = x2 + self.conv4(tmp) * att4
-        return x1, x2
 
 class Network(nn.Module):
 
@@ -691,45 +366,10 @@ class Network(nn.Module):
         self.pose_auxnet = nn.ModuleList()
         self.par_head = nn.ModuleList()
         self.edge_head = nn.ModuleList()
-        # self.sa0 = nn.ModuleList()
-        # self.sa1 = nn.ModuleList()
-        # self.res_net0 =  nn.ModuleList()
-        # self.res_net1 =  nn.ModuleList()
-        # self.remap0 = nn.ModuleList()
-        # self.remap1 = nn.ModuleList()
-        # self.SDnet = nn.ModuleList()
-        for i in range(self.refine_layers + 1):
-            '''
-            if i > 0:
-                #self.SDnet.append(FuseMap(4 * self.num_inchannels[3], 4 * self.num_inchannels[3]))
-                self.remap0.append(nn.Sequential(
-                     # nn.ReLU(inplace=True),
-                     nn.Conv2d(16, 240, kernel_size=1, padding=0, dilation=1, groups=16),
-                     nn.BatchNorm2d(240, momentum=BN_MOMENTUM)
-                ))
-                self.remap1.append(nn.Sequential(
-                     # nn.ReLU(inplace=True),
-                     nn.Conv2d(20, 240, kernel_size=1, padding=0, dilation=1, groups=20),
-                     nn.BatchNorm2d(240, momentum=BN_MOMENTUM)
-                ))
-                self.SDnet.append(Structure_Diffusion_remap(240, 4 * self.num_inchannels[3]))
-            '''
-            # if i > 0:
-            #     self.remap0.append(nn.Sequential(
-            #         # nn.ReLU(inplace=True),
-            #         nn.Conv2d(self._num_joints, 98, kernel_size=1, padding=0, dilation=1, groups=self._num_joints),
-            #         nn.BatchNorm2d(98)
-            #     ))
-            #     self.remap1.append(nn.Sequential(
-            #         # nn.ReLU(inplace=True),
-            #         nn.Conv2d(self._num_classes, 98, kernel_size=1, padding=0, dilation=1, groups=self._num_classes),
-            #         nn.BatchNorm2d(98)
-            #     ))
-            #     self.SDnet.append(Structure_Diffusion_remap(98, 4 * self.num_inchannels[3]))
 
+        for i in range(self.refine_layers + 1):
             self.pose_head.append(nn.Sequential(
                 nn.ReLU(),
-                # PMSF(4 * self.num_inchannels[3], 256),
                 nn.Conv2d(4 * self.num_inchannels[3], 256, kernel_size=1, padding=0, dilation=1),
                 nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
                 nn.ReLU(inplace=True),
@@ -740,18 +380,13 @@ class Network(nn.Module):
                 nn.Conv2d(3 * self.num_inchannels[3], 128, kernel_size=3, padding=1, dilation=1),
                 nn.BatchNorm2d(128, momentum=BN_MOMENTUM),
                 nn.ReLU(inplace=True),
-                # ChannelAttention(256,16),
                 nn.Conv2d(128, self._num_joints, kernel_size=1, padding=0, dilation=1, bias=True)
             ))
             self.par_head.append(nn.Sequential(
                 nn.ReLU(),
-                # ParsingMultiHead(4 * self.num_inchannels[3], 256),
-                # SPHead(4 * self.num_inchannels[3], 256, bias=False),
                 nn.Conv2d(4 * self.num_inchannels[3], 256, kernel_size=1, padding=0, dilation=1),
                 nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
                 nn.ReLU(inplace=True),
-                # PSPModule(4*self.num_inchannels[3],256,sizes=(1,6,12)),
-                # ASPP(4*self.num_inchannels[3],256),
                 nn.Conv2d(256, self._num_classes, kernel_size=1, padding=0, dilation=1, bias=True)
             ))
             self.edge_head.append(nn.Sequential(
