@@ -22,7 +22,6 @@ from models.model_augment import Network
 from dataset.data_loader import LIPDataset as Dataset
 from utils.utils import save_checkpoint
 from utils.utils import create_logger
-from utils.utils import count_parameters_in_MB
 
 
 device = torch.device("cuda")
@@ -207,7 +206,6 @@ def main():
     model = model.cuda()
     model = nn.parallel.DistributedDataParallel(
         model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
-    logger.info("param size = %fMB", count_parameters_in_MB(model))
 
     optimizer = torch.optim.Adam(param_dicts, config.TRAIN.LR)
     optimizer.add_param_group({'params': criterion1.parameters(), 'lr': 0.0001})

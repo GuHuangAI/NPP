@@ -27,7 +27,6 @@ from utils.transforms import flip_back
 from utils.utils import save_checkpoint
 from utils.utils import create_logger
 from utils.utils import get_model_summary
-from utils.utils import count_parameters_in_MB
 from utils.utils import FullModel, get_rank
 from utils.utils import pck_table_output_lip_dataset
 from utils.utils import save_hpe_results_to_lip_format
@@ -270,7 +269,6 @@ def main():
     #model._init_params()
     model = model.cuda()
     model = nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank,find_unused_parameters=True)
-    logger.info("param size = %fMB", count_parameters_in_MB(model))
 
     arch_params = list(map(id, model.module.arch_parameters()))
     weight_params = filter(lambda p: id(p) not in arch_params, model.parameters())
