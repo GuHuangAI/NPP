@@ -193,7 +193,7 @@ def main():
     param_dicts = [
         {"params": [p for n, p in model.named_parameters() if
                     (n.startswith('cells1.') or n.startswith('cells2') or n.startswith('stem')) and p.requires_grad],
-            'lr': 0.33*config.TRAIN.LR,},
+            'lr': 0.2*config.TRAIN.LR,},
 
         {
             "params": [p for n, p in model.named_parameters() if
