@@ -1,4 +1,4 @@
-# NPP
+# NPPNet
 Neural Architecture Search for Joint Human Parsing and Pose Estimation (ICCV2021)
 
 ## Preparation
@@ -23,4 +23,4 @@ Training with 4 gpus:
 If you have any questions, please concat with `huangyuhang@shu.edu.cn`.
 
 ## Thanks
-Thanks to the public repo: [mula(ECCV2018)]() for providing the base code.
+Thanks to the public repo: [mula(ECCV2018)](https://github.com/GuHuangAI/pytorch-mula) for providing the base code.
