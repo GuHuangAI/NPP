@@ -2,13 +2,14 @@ import numpy as np
 import scipy.io as scio
 import cv2
 import os
-from scipy.optimize import linear_sum_assignment
+# from scipy.optimize import linear_sum_assignment
+# from pycocotools.cocoeval import COCOeval
 
-# im = cv2.imread(r'G:\database\pascal_data\JPEGImages'+'\\'+im_name+'.jpg', 1)
-# area = (im.shape[0] + im.shape[1])
 def cal_oks(p_gt, p_pred, box):
+    # sigma = np.array([1., 1., 1., 0.8, 0.8, .6, .6, .6, 1., 0.8, 0.8, .6, .6, .6]) / 10
     vars = (box[0, 2] - box[0, 0]) * (box[0, 3] - box[0, 1]) + np.spacing(1)
     vars = 0.06 * vars
+    # vars = vars * sigma ** 2
     pred_x = p_pred[:, 0] + box[0, 0]
     pred_y = p_pred[:, 1] + box[0, 1]
     gt_x = p_gt[:, 0]
@@ -19,7 +20,7 @@ def cal_oks(p_gt, p_pred, box):
         if vis[i]:
             dx = gt_x[i] - pred_x[i]
             dy = gt_y[i] - pred_y[i]
-            e = (dx ** 2 + dy ** 2) ** (0.5) / vars / 2
+            e = (dx ** 2 + dy ** 2) / vars / 2
             dist = np.exp(-e)
             oks += dist
     oks = oks / sum(vis>0)
@@ -39,15 +40,15 @@ def cal_map(pred, gt_path, map, counts, T=0.5):
             p_pred = pred[j]
             oks_m[i, j] = cal_oks(p_gt, p_pred, box)
 
-    # ind_gt, ind_pred = linear_sum_assignment(oks_m)
     index = np.argmax(oks_m, axis=1)
 
     for i in range(boxes.shape[1]):
         # box = boxes[0, i]
         # p_pred = pred[i]
         # p_gt = gt[0, i]
+        sigma = np.array([1., 1., 1., 0.8, 0.8, .6, .6, .6, 1., 0.8, 0.8, .6, .6, .6]) / 10
         vars = (boxes[0, i][0, 2] - boxes[0, i][0, 0])*(boxes[0, i][0, 3] - boxes[0, i][0, 1]) + np.spacing(1)
-        vars = vars ** (0.5)
+        vars = vars * sigma ** 2
         pred_x = pred[index[i]][:, 0] + boxes[0, i][0, 0]
         pred_y = pred[index[i]][:, 1] + boxes[0, i][0, 1]
         gt_x = gt[0, i][:, 0]
@@ -55,11 +56,11 @@ def cal_map(pred, gt_path, map, counts, T=0.5):
         vis = gt[0, i][:, 2]
         dx = gt_x - pred_x
         dy = gt_y - pred_y
-        e = (dx ** 2 + dy ** 2) ** (0.5) / vars / 2
-        # dist = e
+        e = (dx ** 2 + dy ** 2) / vars / 2
         dist = np.exp(-e)
         acc = np.zeros_like(dist)
-        acc[dist>=T] = 1
+        if oks_m[i, index[i]] >= T:
+            acc[dist>=T] = 1
         vis[vis>0] = 1
         counts += vis
         for j in range(vis.shape[0]):
@@ -84,15 +85,26 @@ if __name__ == '__main__':
             im_name_list.append(line.strip())
     map = list(np.zeros((15)))
     counts = np.zeros((14))
-    for im_name in im_name_list:
-        # im_name = '2008_000003'
-        gt_path = r'G:\database\pascal_data\PersonJoints' + '\\' + im_name + '.mat'
-        if not os.path.isfile(gt_path):
-            continue
-        preds = np.load(r'G:\AutoPP\pascal\pose_pred.npy', allow_pickle=True).item()
-        pred = preds[im_name]
-        map, counts = cal_map(pred, gt_path, map, counts, T=0.5)
-    for i in range(len(map)-1):
-        map[i] /= counts[i]
-    map[-1] = sum(map[:(len(map) -1)]) / (len(map) -1)
+    total = 0
+    preds = np.load(r'G:\AutoPP\pascal\pose_pred.npy', allow_pickle=True).item()
+    AP = []
+    for T in [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]:
+        map = list(np.zeros((15)))
+        counts = np.zeros((14))
+        for im_name in im_name_list:
+            gt_path = r'G:\database\pascal_data\PersonJoints' + '\\' + im_name + '.mat'
+            if not os.path.isfile(gt_path):
+                continue
+            pred = preds[im_name]
+            try:
+                map, counts = cal_map(pred, gt_path, map, counts, T=T)
+                total += 1
+            except:
+                continue
+        for i in range(len(map)-1):
+            map[i] /= counts[i]
+        map[-1] = sum(map[:(len(map) -1)]) / (len(map) -1)
+        AP.append(np.array(map))
+    AP = np.array(AP)
+    mAP = np.mean(AP, axis=0)
     pass
