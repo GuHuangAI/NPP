@@ -13,7 +13,7 @@ Searching with 4 gpus:
 
 ## Train
 Download the pretrained backbone from link: https://pan.baidu.com/s/1gE_675n3FyKNIwh6Rz6huA?pwd=2050
-with the extracing code: 2050, and modify the model path in the line 205 of augment_lip_sybc.py.
+with the extracing code: 2050, and modify the model path in the line 205 of augment_lip_sync.py.
 The newest model weight can be also downloaded from the link.
 
 Training with 4 gpus:
