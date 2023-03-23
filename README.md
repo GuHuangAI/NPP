@@ -12,7 +12,7 @@ Searching with 4 gpus:
 `CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 search_lip_sync.py --cfg ./experiments/lip/384_384.yaml`
 
 ## Train
-Download the pretrained backbone from link: https://pan.baidu.com/s/1gE_675n3FyKNIwh6Rz6huA?pwd=2050
+Download the pretrained backbone from link: https://pan.baidu.com/s/1sIcNXZnM4_U6nthmJAo6NA?pwd=2050 
 with the extracing code: 2050, and modify the model path in the line 205 of augment_lip_sync.py.
 The newest model weight can be also downloaded from the link.
 
