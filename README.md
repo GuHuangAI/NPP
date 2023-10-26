@@ -20,7 +20,7 @@ Training with 4 gpus:
 `CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 augment_lip_sync.py --cfg ./experiments/lip/384_384.yaml`
 
 ## Q&A
-If you have any questions, please concat with `huangyuhang@shu.edu.cn`.
+If you have any questions, please concat with `huangai@nudt.edu.cn`.
 
 ## Thanks
 Thanks to the public repo: [mula(ECCV2018)](https://github.com/GuHuangAI/pytorch-mula) for providing the base code.
