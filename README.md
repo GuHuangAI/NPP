@@ -2,7 +2,9 @@
 Neural Architecture Search for Joint Human Parsing and Pose Estimation (ICCV2021)
 
 ## Preparation
-1. Download the LIP dataset from https://www.sysuhcp.com/lip
+1. Download the LIP dataset from https://www.sysuhcp.com/lip. You can also download it from my baiduDisk: 
+Link：https://pan.baidu.com/s/157uoJWO0H_nV4HbzNE62fg?pwd=h6em 
+Password：h6em
 2. Put the `prepare_file.zip` to your root path of LIP, such as `/home/data/LIP/prepare_file.zip`, and unzip it.
 3. `pip install -r requirements.txt`
 
